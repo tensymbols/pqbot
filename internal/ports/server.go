@@ -2,6 +2,7 @@ package ports
 
 import (
 	"github.com/gin-gonic/gin"
+	"log"
 	"vkbot/internal/app"
 )
 
@@ -22,5 +23,7 @@ func NewServer(port string, app app.App) *Server {
 }
 
 func (s *Server) Run() {
+	log.Println("Server has started")
 	s.engine.Run()
+
 }

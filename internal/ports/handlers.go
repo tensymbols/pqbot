@@ -5,46 +5,41 @@ import (
 	"github.com/gin-gonic/gin"
 	"math/rand"
 	"net/http"
+	"strconv"
+	"strings"
 	"vkbot/internal/app"
+	vkjson "vkbot/internal/presenters"
 )
 
-type message struct {
-	Date                  int           `json:"date"`
-	FromId                int           `json:"from_id"`
-	Id                    int           `json:"id"`
-	Out                   int           `json:"out"`
-	AdminAuthorId         int           `json:"admin_author_id"`
-	Attachments           []interface{} `json:"attachments"`
-	ConversationMessageId int           `json:"conversation_message_id"`
-	FwdMessages           []interface{} `json:"fwd_messages"`
-	Important             bool          `json:"important"`
-	IsHidden              bool          `json:"is_hidden"`
-	PeerId                int           `json:"peer_id"`
-	RandomId              int           `json:"random_id"`
-	Text                  string        `json:"text"`
-}
-
-type messageNewEvent struct {
-	GroupId int    `json:"group_id"`
-	Type    string `json:"type"`
-	EventId string `json:"event_id"`
-	V       string `json:"v"`
-	Object  struct {
-		Message message `json:"message"`
-	} `json:"object"`
-	Secret string `json:"secret"`
-}
-
-func hello(app app.App) gin.HandlerFunc {
+func hello(a app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.WriteString("Hello!")
 		c.Writer.Flush()
 	}
 }
-func eventHandler(app app.App) gin.HandlerFunc {
+
+func getFriends(a app.App) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, err)
+			return
+		}
+		friends, err := a.GetUserFriends(userID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, err)
+			return
+		}
+		c.Writer.WriteString(fmt.Sprint(friends))
+		c.Writer.Flush()
+		fmt.Println(err)
+	}
+}
+
+func eventHandler(a app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		var eventBody messageNewEvent
+		var eventBody vkjson.MessageNewEvent
 		err := c.BindJSON(&eventBody)
 
 		if err != nil {
@@ -53,10 +48,47 @@ func eventHandler(app app.App) gin.HandlerFunc {
 		fmt.Println(eventBody.Type)
 		switch eventBody.Type {
 		case "message_new":
-			fmt.Println(eventBody)
+			text := eventBody.Object.Message.Text
 			fromID := eventBody.Object.Message.FromId
-			fmt.Println(fromID)
-			err = app.SendMessageToUser(int64(fromID), getRandomPrikol())
+			switch {
+			case strings.HasPrefix(text, "/chance"):
+				text = strings.TrimLeft(text, "/chance")
+				if text == "" {
+					err = a.SendMessageToUser(fromID, "чтобы использовать chance, введи /chance [событие]")
+					break
+				}
+				p := strconv.Itoa(rand.Intn(101))
+				err = a.SendMessageToUser(fromID, "👁 Вероятность того, что "+text+" — "+p+" %")
+			case strings.HasPrefix(text, "/true"):
+				text = strings.TrimLeft(text, "/true")
+				if text == "" {
+					err = a.SendMessageToUser(fromID, "чтобы использовать true, введи /true [событие]")
+					break
+				}
+				p := rand.Intn(2)
+				if p == 1 {
+					err = a.SendMessageToUser(fromID, "🧢 Информация о том, что "+text+" — ложь")
+				} else {
+					err = a.SendMessageToUser(fromID, "💯 Информация о том, что "+text+" — правда")
+				}
+
+			case strings.HasPrefix(text, "/help"):
+				err = a.SendMessageToUser(fromID,
+					"Доступные команды: \n"+
+						"/chance [событие] - вероятность события\n"+
+						"/true [событие] - правда или неправда\n"+
+						"/dice - бросить кубик")
+			case strings.HasPrefix(text, "/dice"):
+				roll := strconv.Itoa(rand.Intn(6) + 1)
+				err = a.SendMessageToUser(fromID, "🎲 Вам выпало "+roll+" очков")
+			default:
+				err = a.SendMessageToUser(fromID, []string{
+					"Я тебя не понимаю, используй /help, чтобы посмотреть список команд",
+					"Каво",
+					"Ай донт андестенд",
+				}[rand.Intn(3)])
+			}
+
 			if err != nil {
 				c.Status(http.StatusInternalServerError)
 
@@ -66,7 +98,7 @@ func eventHandler(app app.App) gin.HandlerFunc {
 			c.Writer.WriteString("ok")
 			c.Writer.Flush()
 		case "confirmation":
-			c.Writer.Write([]byte("abe03ede"))
+			c.Writer.Write([]byte("c09aed4d"))
 			c.Status(http.StatusOK)
 		}
 
@@ -74,24 +106,17 @@ func eventHandler(app app.App) gin.HandlerFunc {
 
 }
 
-func getRandomPrikol() string {
-	opt := rand.Int31n(10)
-	switch opt {
-	case 0:
-		return "НИКТО НЕ СМЕЕТ МНЕ ПРИКАЗЫВАТЬ"
-	case 1:
-		return "НУ ЧТО ЕЩЕ"
-	case 2:
-		return "ОТЛЕТАЕШЬ ОЧЕРЕДНЯРА"
-	case 3:
-		return "ДА ЭТО ЖЕСТКО"
-	case 4:
-		return "ЧТО"
-	case 5:
-		return "РЕБЯТА НЕ СТОИТ ВСКРЫВАТЬ ЭТУ ТЕМУ"
-	case 6:
-		return "ДА-ДА НЕ УДИВЛЯЙТЕСЬ"
-	default:
-		return "ТЫ КТО ТАКОЙ ЧТОБЫ ЭТО ДЕЛАТЬ"
+/*func getRandomPrikol() string {
+
+	opts := []string{
+		"НИКТО НЕ СМЕЕТ МНЕ ПРИКАЗЫВАТЬ",
+		"НУ ЧТО ЕЩЕ",
+		"ОТЛЕТАЕШЬ ОЧЕРЕДНЯРА",
+		"ДА ЭТО ЖЕСТКО",
+		"ЧТО",
+		"РЕБЯТА НЕ СТОИТ ВСКРЫВАТЬ ЭТУ ТЕМУ",
+		"ДА-ДА НЕ УДИВЛЯЙТЕСЬ",
+		"ТЫ КТО ТАКОЙ ЧТОБЫ ЭТО ДЕЛАТЬ",
 	}
-}
+	return opts[rand.Intn(len(opts))]
+}*/

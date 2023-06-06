@@ -5,8 +5,9 @@ import (
 	"vkbot/internal/app"
 )
 
-func Router(r gin.IRouter, app app.App) {
+func Router(r gin.IRouter, a app.App) {
 	//	r.POST("/", returnInitString("abe03ede", 220458159))
-	r.GET("/", hello(app))
-	r.POST("/", eventHandler(app))
+	r.GET("/", hello(a))
+	r.GET("/friends/:user_id", getFriends(a))
+	r.POST("/", eventHandler(a))
 }
