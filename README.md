@@ -1,4 +1,4 @@
 # pqbot
-VK community bot /Work in progress
-this bot was created to test VK Api capabilites
+VK community bot WIP
+This bot was created to test VK Api capabilites
 
